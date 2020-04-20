@@ -1,6 +1,6 @@
 import argparse
 import json
-
+import pdb
 from torch.utils.data import DataLoader
 
 from models import *
@@ -22,8 +22,8 @@ def test(cfg,
          dataloader=None):
     # Initialize/load model and set device
     if model is None:
-        device = torch_utils.select_device(opt.device, batch_size=batch_size)
-        verbose = opt.task == 'test'
+        device = torch_utils.select_device('', batch_size=batch_size)
+        verbose = False
 
         # Remove previous
         for f in glob.glob('test_batch*.png'):
@@ -60,7 +60,7 @@ def test(cfg,
 
     # Dataloader
     if dataloader is None:
-        dataset = LoadImagesAndLabels(path, img_size, batch_size, rect=True, single_cls=opt.single_cls)
+        dataset = LoadImagesAndLabels(path, img_size, batch_size, rect=True, single_cls=single_cls)
         batch_size = min(batch_size, len(dataset))
         dataloader = DataLoader(dataset,
                                 batch_size=batch_size,
@@ -223,10 +223,36 @@ def test(cfg,
     return (mp, mr, map, mf1, *(loss.cpu() / len(dataloader)).tolist()), maps
 
 
+def test_attack(is_attack=True):
+    if is_attack:
+        result1, result2 = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
+                                '/home/fengyao/yolov3/data/coco_under_attack.data',
+                                '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+                                16,
+                                416,
+                                0.001,
+                                0.6,
+                                False,
+                                False,
+                                False)
+    else:
+        result1, result2 = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
+                                '/home/fengyao/yolov3/data/coco_before_attack.data',
+                                '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+                                16,
+                                416,
+                                0.001,
+                                0.6,
+                                False,
+                                False,
+                                False)
+    return result1[2]
+
+
 if __name__ == '__main__':
     parser = argparse.ArgumentParser(prog='test.py')
     parser.add_argument('--cfg', type=str, default='cfg/yolov3-spp.cfg', help='*.cfg path')
-    parser.add_argument('--data', type=str, default='data/coco2014.data', help='*.data path')
+    parser.add_argument('--data', type=str, default='data/coco_before_attack.data', help='*.data path')
     parser.add_argument('--weights', type=str, default='weights/yolov3-spp-ultralytics.pt', help='weights path')
     parser.add_argument('--batch-size', type=int, default=16, help='size of each image batch')
     parser.add_argument('--img-size', type=int, default=416, help='inference size (pixels)')
