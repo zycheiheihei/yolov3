@@ -8,6 +8,36 @@ from utils.datasets import *
 from utils.utils import *
 
 
+def iou_vector(bbox1, bbox2):
+    select_indexes = np.where((bbox1[:, 0] < bbox2[2]) & (bbox1[:, 2] > bbox2[0]) &
+                              (bbox1[:, 1] < bbox2[3]) & (bbox1[:, 3] > bbox2[1]))[0]
+    if len(select_indexes) == 0:
+        return -1, 0
+    bbox1_selected = bbox1[select_indexes, :]
+    area1 = (bbox1_selected[:, 2] - bbox1_selected[:, 0]) * (bbox1_selected[:, 3] - bbox1_selected[:, 1])
+    area2 = (bbox2[2] - bbox2[0]) * (bbox2[3] - bbox2[1])
+    overlap_left = np.maximum(bbox1_selected[:, 0], bbox2[0])
+    overlap_right = np.minimum(bbox1_selected[:, 2], bbox2[2])
+    overlap_bottom = np.maximum(bbox1_selected[:, 1], bbox2[1])
+    overlap_top = np.minimum(bbox1_selected[:, 3], bbox2[3])
+    area_overlap = (overlap_right - overlap_left) * (overlap_top - overlap_bottom)
+    max_index = select_indexes[np.argmax(area_overlap / (area1 + area2 - area_overlap))]
+    max_value = np.max(area_overlap / (area1 + area2 - area_overlap))
+    return max_index, max_value
+
+
+def get_acc(bboxes, labels, gt_bboxes, gt_labels):
+    iou_acc = 0
+    class_acc = 0
+    for index in range(0, len(gt_labels)):
+        match_index, max_iou = iou_vector(bboxes, gt_bboxes[index])
+        if match_index > -1:
+            if labels[match_index] == gt_labels[index]:
+                class_acc += 1
+                iou_acc += max_iou
+    return class_acc, iou_acc, len(gt_labels)
+
+
 def test(cfg,
          data,
          weights=None,
@@ -20,6 +50,7 @@ def test(cfg,
          augment=False,
          model=None,
          dataloader=None):
+    class_acc, iou_acc, num_labels = 0, 0, 0
     # Initialize/load model and set device
     if model is None:
         device = torch_utils.select_device('', batch_size=batch_size)
@@ -102,7 +133,22 @@ def test(cfg,
             t = torch_utils.time_synchronized()
             output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres)  # nms
             t1 += torch_utils.time_synchronized() - t
-
+        for index in range(len(output)):
+            target = targets[torch.where(targets[:, 0] == index)[0]].cpu().numpy()
+            target_bbox = target[:, 2:6]
+            target_bbox[:, 0] = target_bbox[:, 0] - target_bbox[:, 2] / 2
+            target_bbox[:, 2] += target_bbox[:, 0]
+            target_bbox[:, 1] = target_bbox[:, 1] - target_bbox[:, 3] / 2
+            target_bbox[:, 3] += target_bbox[:, 1]
+            target_bbox[:, 0] *= imgs.size()[2]
+            target_bbox[:, 2] *= imgs.size()[2]
+            target_bbox[:, 1] *= imgs.size()[3]
+            target_bbox[:, 3] *= imgs.size()[3]
+            result = get_acc(output[index][:, 0:4].cpu().numpy(), output[index][:, -1].cpu().numpy(),
+                             target_bbox, target[:, 1])
+            class_acc += result[0]
+            iou_acc += result[1]
+            num_labels += result[2]
         # Statistics per image
         for si, pred in enumerate(output):
             labels = targets[targets[:, 0] == si, 1:]
@@ -220,33 +266,36 @@ def test(cfg,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    return (mp, mr, map, mf1, *(loss.cpu() / len(dataloader)).tolist()), maps
+    iou_acc2 = iou_acc / num_labels
+    iou_acc /= class_acc
+    class_acc /= num_labels
+    return map, 100 * class_acc, 100 * iou_acc, 100 * iou_acc2
 
 
 def test_attack(is_attack=True):
     if is_attack:
-        result1, result2 = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
-                                '/home/fengyao/yolov3/data/coco_under_attack.data',
-                                '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
-                                16,
-                                416,
-                                0.001,
-                                0.6,
-                                False,
-                                False,
-                                False)
+        result = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
+                      '/home/fengyao/yolov3/data/coco_under_attack.data',
+                      '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+                      16,
+                      416,
+                      0.001,
+                      0.6,
+                      False,
+                      False,
+                      False)
     else:
-        result1, result2 = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
-                                '/home/fengyao/yolov3/data/coco_before_attack.data',
-                                '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
-                                16,
-                                416,
-                                0.001,
-                                0.6,
-                                False,
-                                False,
-                                False)
-    return result1[2]
+        result = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
+                      '/home/fengyao/yolov3/data/coco_before_attack.data',
+                      '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+                      16,
+                      416,
+                      0.001,
+                      0.6,
+                      False,
+                      False,
+                      False)
+    return result
 
 
 if __name__ == '__main__':
