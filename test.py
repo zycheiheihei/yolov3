@@ -35,6 +35,8 @@ def get_acc(bboxes, labels, gt_bboxes, gt_labels):
             if labels[match_index] == gt_labels[index]:
                 class_acc += 1
                 iou_acc += max_iou
+            else:
+                assert abs(labels[match_index] - gt_labels[index]) >= 1
     return class_acc, iou_acc, len(gt_labels)
 
 
@@ -140,11 +142,14 @@ def test(cfg,
             target_bbox[:, 2] += target_bbox[:, 0]
             target_bbox[:, 1] = target_bbox[:, 1] - target_bbox[:, 3] / 2
             target_bbox[:, 3] += target_bbox[:, 1]
-            target_bbox[:, 0] *= imgs.size()[2]
-            target_bbox[:, 2] *= imgs.size()[2]
-            target_bbox[:, 1] *= imgs.size()[3]
-            target_bbox[:, 3] *= imgs.size()[3]
-            result = get_acc(output[index][:, 0:4].cpu().numpy(), output[index][:, -1].cpu().numpy(),
+            target_bbox[:, 0] *= width
+            target_bbox[:, 2] *= width
+            target_bbox[:, 1] *= height
+            target_bbox[:, 3] *= height
+            output_bbox = output[index][:, 0:4].detach()
+            clip_coords(output_bbox, (height, width))
+            result = get_acc(output_bbox.cpu().numpy(),
+                             output[index][:, -1].cpu().numpy(),
                              target_bbox, target[:, 1])
             class_acc += result[0]
             iou_acc += result[1]
