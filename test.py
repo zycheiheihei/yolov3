@@ -298,7 +298,7 @@ def test(cfg,
 def test_attack(is_attack=True):
     if is_attack:
         result = test('/data/zhangyic/TPAMI/yolov3/cfg/yolov3-spp.cfg',
-                      '/data/zhangyic/TPAMI/yolov3/data/coco_under_attack_target.data',
+                      '/data/zhangyic/TPAMI/yolov3/data/coco_under_attack.data',
                       '/data/zhangyic/TPAMI/yolov3/weights/yolov3-spp-ultralytics.pt',
                       16,
                       416,
@@ -309,7 +309,7 @@ def test_attack(is_attack=True):
                       False)
     else:
         result = test('/data/zhangyic/TPAMI/yolov3/cfg/yolov3-spp.cfg',
-                      '/data/zhangyic/TPAMI/yolov3/data/coco_before_attack_target.data',
+                      '/data/zhangyic/TPAMI/yolov3/data/coco_before_attack.data',
                       '/data/zhangyic/TPAMI/yolov3/weights/yolov3-spp-ultralytics.pt',
                       16,
                       416,
