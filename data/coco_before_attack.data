@@ -1,4 +1,4 @@
 classes=80
-train=/home/fengyao/yolov3/data/coco_before_attack.txt
-valid=/home/fengyao/yolov3/data/coco_before_attack.txt
-names=/home/fengyao/yolov3/data/coco.names
+train=/data/zhangyic/TPAMI/yolov3/data/coco_zyc_before_attack.txt
+valid=/data/zhangyic/TPAMI/yolov3/data/coco_zyc_before_attack.txt
+names=/data/zhangyic/TPAMI/yolov3/data/coco.names

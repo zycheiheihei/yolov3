@@ -6,6 +6,9 @@ from torch.utils.data import DataLoader
 from models import *
 from utils.datasets import *
 from utils.utils import *
+import os
+
+os.environ["CUDA_VISIBLE_DEVICES"] = "3"
 
 
 def iou_vector(bbox1, bbox2):
@@ -38,6 +41,16 @@ def get_acc(bboxes, labels, gt_bboxes, gt_labels):
             else:
                 assert abs(labels[match_index] - gt_labels[index]) >= 1
     return class_acc, iou_acc, len(gt_labels)
+
+def get_targeted_acc(bboxes, labels, gt_bboxes, gt_labels):
+    iou_acc = 0
+    class_acc = 0
+    for index in range(0, len(gt_labels)):
+        match_index, max_iou = iou_vector(bboxes, gt_bboxes[index])
+        if match_index > -1:
+            if labels[match_index] == gt_labels[index]:
+                return 1
+    return 0
 
 
 def test(cfg,
@@ -109,6 +122,7 @@ def test(cfg,
     p, r, f1, mp, mr, map, mf1, t0, t1 = 0., 0., 0., 0., 0., 0., 0., 0., 0.
     loss = torch.zeros(3, device=device)
     jdict, stats, ap, ap_class = [], [], [], []
+    targeted_acc = 0
     for batch_i, (imgs, targets, paths, shapes) in enumerate(tqdm(dataloader, desc=s)):
         imgs = imgs.to(device).float() / 255.0  # uint8 to float32, 0 - 255 to 0.0 - 1.0
         targets = targets.to(device)
@@ -135,7 +149,10 @@ def test(cfg,
             t = torch_utils.time_synchronized()
             output = non_max_suppression(inf_out, conf_thres=conf_thres, iou_thres=iou_thres)  # nms
             t1 += torch_utils.time_synchronized() - t
+        
         for index in range(len(output)):
+            if output[index] is None:
+                continue
             target = targets[torch.where(targets[:, 0] == index)[0]].cpu().numpy()
             target_bbox = target[:, 2:6]
             target_bbox[:, 0] = target_bbox[:, 0] - target_bbox[:, 2] / 2
@@ -148,12 +165,11 @@ def test(cfg,
             target_bbox[:, 3] *= height
             output_bbox = output[index][:, 0:4].detach()
             clip_coords(output_bbox, (height, width))
-            result = get_acc(output_bbox.cpu().numpy(),
+            result = get_targeted_acc(output_bbox.cpu().numpy(),
                              output[index][:, -1].cpu().numpy(),
                              target_bbox, target[:, 1])
-            class_acc += result[0]
-            iou_acc += result[1]
-            num_labels += result[2]
+            targeted_acc+=result
+            
         # Statistics per image
         for si, pred in enumerate(output):
             labels = targets[targets[:, 0] == si, 1:]
@@ -271,17 +287,19 @@ def test(cfg,
     maps = np.zeros(nc) + map
     for i, c in enumerate(ap_class):
         maps[c] = ap[i]
-    iou_acc2 = iou_acc / num_labels
-    iou_acc /= class_acc
-    class_acc /= num_labels
-    return map, 100 * class_acc, 100 * iou_acc, 100 * iou_acc2
+    # iou_acc2 = iou_acc / num_labels
+    # iou_acc /= class_acc
+    # class_acc /= num_labels
+    print(targeted_acc/len(dataset))
+    return targeted_acc/len(dataset)
+    # return map, 100 * class_acc, 100 * iou_acc, 100 * iou_acc2
 
 
 def test_attack(is_attack=True):
     if is_attack:
-        result = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
-                      '/home/fengyao/yolov3/data/coco_under_attack.data',
-                      '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+        result = test('/data/zhangyic/TPAMI/yolov3/cfg/yolov3-spp.cfg',
+                      '/data/zhangyic/TPAMI/yolov3/data/coco_under_attack_target.data',
+                      '/data/zhangyic/TPAMI/yolov3/weights/yolov3-spp-ultralytics.pt',
                       16,
                       416,
                       0.001,
@@ -290,9 +308,9 @@ def test_attack(is_attack=True):
                       False,
                       False)
     else:
-        result = test('/home/fengyao/yolov3/cfg/yolov3-spp.cfg',
-                      '/home/fengyao/yolov3/data/coco_before_attack.data',
-                      '/home/fengyao/yolov3/weights/yolov3-spp-ultralytics.pt',
+        result = test('/data/zhangyic/TPAMI/yolov3/cfg/yolov3-spp.cfg',
+                      '/data/zhangyic/TPAMI/yolov3/data/coco_before_attack_target.data',
+                      '/data/zhangyic/TPAMI/yolov3/weights/yolov3-spp-ultralytics.pt',
                       16,
                       416,
                       0.001,
